@@ -5,16 +5,14 @@ AnelPowerControl
 
 """
 
-from pprint import pprint
+import socket 
+from collections import OrderedDict
 import logging
 try:
     import requests
 except ImportError:
     pass
-import select
-import socket 
-import time
-from collections import OrderedDict
+
 
 logger = logging.getLogger(__name__)
 
@@ -43,12 +41,12 @@ class HTTPInterface(Interface):
 
         splitted = r.text.split(';')
 
-        data = dict(zip(fields[:9], splitted))
-        data['sockets'] = {}
+        data = dict(zip(self.fields[:9], splitted))
+        power_sockets = data['power_sockets'] = OrderedDict()
 
         for index in range(8):
             # socket = AnelPowerControlSocket(index, name=splitted[10 + index])
-            socket = {
+            power_socket = {
                 'index': index,
                 'name': splitted[10 + index],
                 'is_on': bool(int(splitted[20 + index])),
@@ -56,8 +54,7 @@ class HTTPInterface(Interface):
                 'info': splitted[40 + index],
                 # 'tk': _splitted[50 + i],
             }
-            data['sockets'][index] = socket
-            data['sockets'][socket['name']] = socket
+            power_sockets[power_socket['name']] = power_socket
 
         return data
 
@@ -65,6 +62,8 @@ class HTTPInterface(Interface):
         r = requests.post('http://%s/ctrl.htm' % (address, ), 
                           auth=(username, password), data='F%d=T' % (socket_number, ),
                           headers={'content-type': 'text/plain'})
+
+        print(r.text)
 
 
 class UDPInterface(Interface):
@@ -93,7 +92,6 @@ class UDPInterface(Interface):
 
     def data(self, address, auth):
         self.socket_out.sendto('wer da?'.encode(self.charset), (address, self.port_out))
-        # rl, _, _ = select.select([self.socket_in], [], [], self.timeout)
         while True:
             try:
                 response, (sender, port) = self.socket_in.recvfrom(2048)
@@ -102,7 +100,6 @@ class UDPInterface(Interface):
                     break
             except socket.timeout:
                 print('TIMEOUT')
-        # response, (sender, port) = self.socket_in.recvfrom(2048)
 
         return self.parse_response(response)
 
@@ -173,7 +170,7 @@ class PowerSocket:
 
     def __repr__(self):
         status = 'on' if self.is_on else 'disabled' if self.disabled else 'off'
-        return '<PowerSocket #{} - {} - {}>'.format(self.index, self.name, status)
+        return '<PowerSocket #{} - `{}` - {}>'.format(self.index, self.name, status)
 
     def on(self):
         self.control.switch(self.index, True)
@@ -220,6 +217,7 @@ class AnelPowerControl:
 if __name__ == '__main__':
     # logging.basicConfig(format='%(levelname)s:%(message)s', 
     #                     level=logging.DEBUG)
+    from pprint import pprint
     from time import sleep
     AnelPowerControl.default_interface = UDPInterface()
     AnelPowerControl.default_interface = HTTPInterface()
